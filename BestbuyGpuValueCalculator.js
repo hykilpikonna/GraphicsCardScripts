@@ -4,6 +4,8 @@
 // @version      1.0
 // @description  Calculates and displays GPU value
 // @author       Hykilpikonna
+// @license      MIT
+// @supportURL   https://github.com/hykilpikonna/GraphicsCardScripts
 // @match        https://www.bestbuy.ca/en-ca/collection/graphics-cards-with-nvidia-chipset/349221?icmp=computing_evergreen_graphics_cards_category_listing_category_icon_shopby_nvidia
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=bestbuy.ca
 // @require      http://code.jquery.com/jquery-3.6.0.min.js
