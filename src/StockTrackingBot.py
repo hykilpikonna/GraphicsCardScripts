@@ -114,7 +114,8 @@ if __name__ == '__main__':
     # web_options.headless = True
 
     browser = Chrome(options=web_options)
-    browser.get('https://www.bestbuy.ca/en-ca/collection/graphics-cards-with-nvidia-chipset/349221')
+    # browser.get('https://www.bestbuy.ca/en-ca/collection/graphics-cards-with-nvidia-chipset/349221')
+    browser.get('https://www.bestbuy.ca/en-ca/collection/rtx-30-series-graphic-cards/316108')
 
     # parse_page(browser)
     # browser.close()
