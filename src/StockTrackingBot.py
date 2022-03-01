@@ -1,5 +1,8 @@
 import os
+import re
+import sys
 import time
+import traceback
 
 import requests
 from selenium.webdriver import Chrome
@@ -29,12 +32,29 @@ MODELS = [
 ]
 USD_TO_CAD = 1.27
 AVAIL_TABLE: dict[str, bool] = {}
+TITLE_SHORTEN = re.compile('(rtx|nvidia|geforce|edition|gddr[56]x*|video|card)', flags=re.IGNORECASE)
+
+
+def shorten_title(title: str):
+    short_title = TITLE_SHORTEN.sub('', title)
+    while '  ' in short_title:
+        short_title = short_title.replace('  ', ' ')
+    return short_title.strip()
+
+
+def send_message(msg: str):
+    r = requests.get(f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage',
+                     params={'chat_id': TG_RECEIVER, 'parse_mode': 'Markdown', 'text': msg})
+
+    if r.status_code != 200:
+        print('Request not OK:', r.status_code, r.text)
 
 
 def parse_page(browser: Chrome):
     # Parse page
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
+        title = shorten_title(title)
 
         # Check availability
         avail = item.find_elements(CSS, 'div[data-automation="store-availability-messages"] span[data-automation="store-availability-checkmark"]')
@@ -42,8 +62,12 @@ def parse_page(browser: Chrome):
         # Not available, check if it was previously available
         if len(avail) == 0:
             if title in AVAIL_TABLE:
-                # TODO: Feedback
+                send_message(f'Sold out: `{title}`')
                 del AVAIL_TABLE[title]
+            continue
+
+        # Already sent availability message
+        if title in AVAIL_TABLE:
             continue
 
         # Get price
@@ -66,13 +90,17 @@ def parse_page(browser: Chrome):
         if price_incr > INCR_MAX:
             print(' '.join(title.split()[:2]), f'is in stock but price increase {price_incr * 100:.0f}% '
                                                f'is larger than defined threshold.')
-            continue
+            # continue
+
+        # Find link
+        link = item.find_element(CSS, 'a').get_attribute('href')
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-
-        print(model)
-        print(title)
+        send_message(f'{model[0].upper()} Became Available!\n'
+                     f'\n'
+                     f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
+                     f'- [{title}]({link})')
 
 
 if __name__ == '__main__':
@@ -82,11 +110,15 @@ if __name__ == '__main__':
     browser = Chrome(options=web_options)
     browser.get('https://www.bestbuy.ca/en-ca/collection/graphics-cards-with-nvidia-chipset/349221')
 
-    parse_page(browser)
-    browser.close()
+    # parse_page(browser)
+    # browser.close()
 
     # Refresh indefinitely
-    # while True:
-    #     parse_page(browser)
-    #     time.sleep(5)
-    #     browser.refresh()
+    while True:
+        try:
+            parse_page(browser)
+        except Exception as e:
+            traceback.print_exc()
+        time.sleep(5)
+        browser.refresh()
+        time.sleep(2)
