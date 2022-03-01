@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import time
 import traceback
 
@@ -32,6 +31,7 @@ MODELS = [
 ]
 USD_TO_CAD = 1.27
 AVAIL_TABLE: dict[str, bool] = {}
+IGNORED = []
 TITLE_SHORTEN = re.compile('(rtx|nvidia|geforce|edition|gddr[56]x*|video|card)', flags=re.IGNORECASE)
 
 
@@ -55,6 +55,10 @@ def parse_page(browser: Chrome):
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
         title = shorten_title(title)
+
+        # Ignored
+        if title in IGNORED:
+            continue
 
         # Check availability
         avail = item.find_elements(CSS, 'div[data-automation="store-availability-messages"] span[data-automation="store-availability-checkmark"]')
@@ -90,7 +94,8 @@ def parse_page(browser: Chrome):
         if price_incr > INCR_MAX:
             print(' '.join(title.split()[:2]), f'is in stock but price increase {price_incr * 100:.0f}% '
                                                f'is larger than defined threshold.')
-            # continue
+            IGNORED.append(title)
+            continue
 
         # Find link
         link = item.find_element(CSS, 'a').get_attribute('href')
