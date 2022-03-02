@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
     # Refresh indefinitely
     while True:
-        time.sleep(3)
+        time.sleep(5)
         parse()
         browser.refresh()
         time.sleep(2)
