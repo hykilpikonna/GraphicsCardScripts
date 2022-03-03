@@ -48,4 +48,4 @@ class TelegramReporter:
 
     def alert(self) -> Message:
         if self.alert_receiver:
-            return self.send('/alert', self.alert_receiver)
+            return self.send('/alarm', self.alert_receiver)
