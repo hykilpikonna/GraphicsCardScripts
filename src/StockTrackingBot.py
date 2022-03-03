@@ -7,11 +7,15 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+from bestbuy_utils import get_availability, avail_str, get_avail_v2
 from utils import parse_retry, TelegramReporter, CSS
 
 # Config
 # Price increase ratio threshold (ignore everything higher than this ratio)
 INCR_MAX = 0.2
+ALERT_MODELS = ['3060 ti', '3070', '3070 ti', '3080']
+ALERT_MIN_AVAILABLE = 2
+
 # Telegram chat ID that receives update messages (could be a channel in @channel_id format)
 # TG_RECEIVER = 1770239825
 TG_RECEIVER = '@toronto_bestbuy_gpu'
@@ -46,6 +50,8 @@ def shorten_title(title: str):
 
 
 def parse_page(browser: Chrome):
+    become_available = []
+
     # Parse page
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
@@ -97,10 +103,30 @@ def parse_page(browser: Chrome):
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-        TG.send(f'{model[0].upper()} Became Available!\n'
-                f'\n'
-                f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
-                f'- [{title}]({link})')
+        msg = TG.send(f'{model[0].upper()} Became Available!\n'
+                      f'\n'
+                      f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
+                      f'- [{title}]({link})')
+        become_available.append((title, model, link, msg, price, price_incr, value))
+
+    # Notify user
+    for tup in become_available:
+        title, model, link, msg, price, price_incr, value = tup
+
+        # Get availability
+        avail = get_avail_v2(link)
+
+        # Edit message
+        msg.edit_text(f'{model[0].upper()} (${price:.0f} {price_incr * 100:.0f}% {value:.0f}) Became Available!\n'
+                      f'\n'
+                      f'[{title}]({link})\n'
+                      f'{avail_str(avail[:5])}\n',
+                      parse_mode='Markdown')
+
+        # Check alert
+        if model[0] in ALERT_MODELS:
+            if sum(a.n for a in avail) >= ALERT_MIN_AVAILABLE:
+                TG.alert()
 
 
 if __name__ == '__main__':
