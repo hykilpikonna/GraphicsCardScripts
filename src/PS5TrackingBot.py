@@ -1,12 +1,11 @@
 import os
 import time
 
-import requests
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
-from utils import parse_retry
+from utils import parse_retry, TelegramReporter, CSS
 
 # Config
 # Telegram chat ID that receives update messages (could be a channel in @channel_id format)
@@ -18,16 +17,8 @@ TG_TOKEN = os.environ['TG_TOKEN']
 ALERT_RECEIVER = -1001655384423
 
 # Constants
-CSS = By.CSS_SELECTOR
 AVAIL_TABLE: dict[str, bool] = {}
-
-
-def send_message(msg: str):
-    r = requests.get(f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage',
-                     params={'chat_id': TG_RECEIVER, 'parse_mode': 'Markdown', 'text': msg})
-
-    if r.status_code != 200:
-        print('Request not OK:', r.status_code, r.text)
+TG = TelegramReporter(TG_TOKEN, TG_RECEIVER, ALERT_RECEIVER)
 
 
 def parse_page(browser: Chrome):
@@ -41,7 +32,7 @@ def parse_page(browser: Chrome):
         # Not available, check if it was previously available
         if len(avail) == 0:
             if title in AVAIL_TABLE:
-                send_message(f'Sold out: `{title}`')
+                TG.send(f'Sold out: `{title}`')
                 del AVAIL_TABLE[title]
             continue
 
@@ -58,11 +49,11 @@ def parse_page(browser: Chrome):
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-        send_message(f'PS5 Became Available!\n'
-                     f'- [{title}]({link}) ${price:.2f}')
+        TG.send(f'PS5 Became Available!\n'
+                        f'- [{title}]({link}) ${price:.2f}')
 
         # Check alert
-
+        TG.alert()
 
 
 if __name__ == '__main__':
@@ -72,7 +63,7 @@ if __name__ == '__main__':
     browser = Chrome(options=web_options)
     browser.get('https://www.bestbuy.ca/en-ca/category/ps5-consoles/17583383')
 
-    send_message('Bot started')
+    TG.send('Bot restarted')
 
     # parse_page(browser)
     # browser.close()

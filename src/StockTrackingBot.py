@@ -7,7 +7,7 @@ from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
-from utils import parse_retry
+from utils import parse_retry, TelegramReporter, CSS
 
 # Config
 # Price increase ratio threshold (ignore everything higher than this ratio)
@@ -17,9 +17,10 @@ INCR_MAX = 0.2
 TG_RECEIVER = '@toronto_bestbuy_gpu'
 # Telegram bot token
 TG_TOKEN = os.environ['TG_TOKEN']
+# Alert receiver telegram chat ID
+ALERT_RECEIVER = -1001655384423
 
 # Constants
-CSS = By.CSS_SELECTOR
 MODELS = [
     ['3060 ti', 400,  132],
     ['3070 ti', 600,  167],
@@ -34,6 +35,7 @@ USD_TO_CAD = 1.27
 AVAIL_TABLE: dict[str, bool] = {}
 IGNORED = []
 TITLE_SHORTEN = re.compile('(rtx|nvidia|geforce|edition|gddr[56]x*|video|card)', flags=re.IGNORECASE)
+TG = TelegramReporter(TG_TOKEN, TG_RECEIVER, ALERT_RECEIVER)
 
 
 def shorten_title(title: str):
@@ -41,14 +43,6 @@ def shorten_title(title: str):
     while '  ' in short_title:
         short_title = short_title.replace('  ', ' ')
     return short_title.strip()
-
-
-def send_message(msg: str):
-    r = requests.get(f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage',
-                     params={'chat_id': TG_RECEIVER, 'parse_mode': 'Markdown', 'text': msg})
-
-    if r.status_code != 200:
-        print('Request not OK:', r.status_code, r.text)
 
 
 def parse_page(browser: Chrome):
@@ -67,7 +61,7 @@ def parse_page(browser: Chrome):
         # Not available, check if it was previously available
         if len(avail) == 0:
             if title in AVAIL_TABLE:
-                send_message(f'Sold out: `{title}`')
+                TG.send(f'Sold out: `{title}`')
                 del AVAIL_TABLE[title]
             continue
 
@@ -103,10 +97,10 @@ def parse_page(browser: Chrome):
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-        send_message(f'{model[0].upper()} Became Available!\n'
-                     f'\n'
-                     f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
-                     f'- [{title}]({link})')
+        TG.send(f'{model[0].upper()} Became Available!\n'
+                f'\n'
+                f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
+                f'- [{title}]({link})')
 
 
 if __name__ == '__main__':
@@ -119,6 +113,8 @@ if __name__ == '__main__':
 
     # parse_page(browser)
     # browser.close()
+
+    TG.send('Bot restarted')
 
     # Refresh indefinitely
     while True:
