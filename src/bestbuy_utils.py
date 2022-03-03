@@ -85,3 +85,7 @@ def get_availability(browser: WebDriver, url: str) -> list[AvailableStore]:
 
     return result
 
+
+def avail_str(avail: list[AvailableStore]) -> str:
+    return '\n'.join([f'- {a.loc}: {"∞" if a.n == 100 else a.n}' for a in avail])
+
