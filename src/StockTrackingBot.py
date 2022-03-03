@@ -1,13 +1,13 @@
 import os
 import re
 import time
-import traceback
 
 import requests
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+
+from utils import parse_retry
 
 # Config
 # Price increase ratio threshold (ignore everything higher than this ratio)
@@ -120,18 +120,9 @@ if __name__ == '__main__':
     # parse_page(browser)
     # browser.close()
 
-    def parse(tries: int = 0):
-        try:
-            parse_page(browser)
-        except StaleElementReferenceException:
-            if tries < 3:
-                parse(tries + 1)
-        except Exception as e:
-            traceback.print_exc()
-
     # Refresh indefinitely
     while True:
         time.sleep(5)
-        parse()
+        parse_retry(parse_page, browser)
         browser.refresh()
         time.sleep(2)
