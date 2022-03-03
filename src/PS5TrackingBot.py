@@ -14,11 +14,12 @@ from utils import parse_retry
 TG_RECEIVER = '@toronto_ps5_bestbuy'
 # Telegram bot token
 TG_TOKEN = os.environ['TG_TOKEN']
+# Alert receiver telegram chat ID
+ALERT_RECEIVER = -1001655384423
 
 # Constants
 CSS = By.CSS_SELECTOR
 AVAIL_TABLE: dict[str, bool] = {}
-IGNORED = []
 
 
 def send_message(msg: str):
@@ -33,10 +34,6 @@ def parse_page(browser: Chrome):
     # Parse page
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
-
-        # Ignored
-        if title in IGNORED:
-            continue
 
         # Check availability
         avail = item.find_elements(CSS, 'div[data-automation="store-availability-messages"] span[data-automation="store-availability-checkmark"]')
@@ -62,7 +59,10 @@ def parse_page(browser: Chrome):
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
         send_message(f'PS5 Became Available!\n'
-                     f'- [{title}]({link})')
+                     f'- [{title}]({link}) ${price:.2f}')
+
+        # Check alert
+
 
 
 if __name__ == '__main__':
