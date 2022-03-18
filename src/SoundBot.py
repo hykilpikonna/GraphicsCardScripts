@@ -5,7 +5,9 @@ import pygame
 import uvicorn
 from fastapi import FastAPI
 from pygame.mixer import Sound
-from telegram.ext import Updater, Dispatcher, CommandHandler
+from telegram import Update
+from telegram.ext import Updater, Dispatcher, CommandHandler, MessageHandler, CallbackContext, \
+    Filters
 
 # Config
 AUDIO = 'alarm.mp3'
@@ -32,6 +34,16 @@ async def stop():
     return {'message': 'sound stopped'}
 
 
+def on_message(u: Update, c: CallbackContext):
+    t = u.effective_message.text.lower()
+    if 'stop' in t:
+        asyncio.run(stop())
+    if 'alarm' in t:
+        asyncio.run(alarm())
+    else:
+        print('Not identified:', u)
+
+
 async def start_telegram():
     updater = Updater(token=TG_TOKEN)
     dispatcher: Dispatcher = updater.dispatcher
@@ -39,6 +51,7 @@ async def start_telegram():
 
     dispatcher.add_handler(CommandHandler('stop', lambda a, b: asyncio.run(stop())))
     dispatcher.add_handler(CommandHandler('alarm', lambda a, b: asyncio.run(alarm())))
+    dispatcher.add_handler(MessageHandler(Filters.text, on_message))
 
     print('Starting Telegram...')
     updater.start_polling()
