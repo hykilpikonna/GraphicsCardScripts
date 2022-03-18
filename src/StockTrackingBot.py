@@ -1,25 +1,30 @@
 import os
 import re
 import time
-import traceback
 
 import requests
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+from bestbuy_utils import get_availability, avail_str, get_avail_v2
+from utils import parse_retry, TelegramReporter, CSS
+
 # Config
 # Price increase ratio threshold (ignore everything higher than this ratio)
 INCR_MAX = 0.2
+ALERT_MODELS = ['3060 ti', '3070', '3070 ti', '3080']
+ALERT_MIN_AVAILABLE = 2
+
 # Telegram chat ID that receives update messages (could be a channel in @channel_id format)
 # TG_RECEIVER = 1770239825
 TG_RECEIVER = '@toronto_bestbuy_gpu'
 # Telegram bot token
 TG_TOKEN = os.environ['TG_TOKEN']
+# Alert receiver telegram chat ID
+ALERT_RECEIVER = -1001655384423
 
 # Constants
-CSS = By.CSS_SELECTOR
 MODELS = [
     ['3060 ti', 400,  132],
     ['3070 ti', 600,  167],
@@ -34,6 +39,7 @@ USD_TO_CAD = 1.27
 AVAIL_TABLE: dict[str, bool] = {}
 IGNORED = []
 TITLE_SHORTEN = re.compile('(rtx|nvidia|geforce|edition|gddr[56]x*|video|card)', flags=re.IGNORECASE)
+TG = TelegramReporter(TG_TOKEN, TG_RECEIVER, ALERT_RECEIVER)
 
 
 def shorten_title(title: str):
@@ -43,15 +49,9 @@ def shorten_title(title: str):
     return short_title.strip()
 
 
-def send_message(msg: str):
-    r = requests.get(f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage',
-                     params={'chat_id': TG_RECEIVER, 'parse_mode': 'Markdown', 'text': msg})
-
-    if r.status_code != 200:
-        print('Request not OK:', r.status_code, r.text)
-
-
 def parse_page(browser: Chrome):
+    become_available = []
+
     # Parse page
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
@@ -67,7 +67,7 @@ def parse_page(browser: Chrome):
         # Not available, check if it was previously available
         if len(avail) == 0:
             if title in AVAIL_TABLE:
-                send_message(f'Sold out: `{title}`')
+                TG.send(f'Sold out: `{title}`')
                 del AVAIL_TABLE[title]
             continue
 
@@ -103,10 +103,30 @@ def parse_page(browser: Chrome):
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-        send_message(f'{model[0].upper()} Became Available!\n'
-                     f'\n'
-                     f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
-                     f'- [{title}]({link})')
+        msg = TG.send(f'{model[0].upper()} Became Available!\n'
+                      f'\n'
+                      f'${price:.0f} | {price_incr * 100:.0f}% Incr | Value: {value:.0f}\n'
+                      f'- [{title}]({link})')
+        become_available.append((title, model, link, msg, price, price_incr, value))
+
+    # Notify user
+    for tup in become_available:
+        title, model, link, msg, price, price_incr, value = tup
+
+        # Get availability
+        avail = get_avail_v2(link)
+
+        # Edit message
+        msg.edit_text(f'{model[0].upper()} (${price:.0f} {price_incr * 100:.0f}% {value:.0f}) Became Available!\n'
+                      f'\n'
+                      f'[{title}]({link})\n'
+                      f'{avail_str(avail[:5])}\n',
+                      parse_mode='Markdown')
+
+        # Check alert
+        if model[0] in ALERT_MODELS:
+            if sum(a.n for a in avail) >= ALERT_MIN_AVAILABLE:
+                TG.alert()
 
 
 if __name__ == '__main__':
@@ -120,18 +140,11 @@ if __name__ == '__main__':
     # parse_page(browser)
     # browser.close()
 
-    def parse(tries: int = 0):
-        try:
-            parse_page(browser)
-        except StaleElementReferenceException:
-            if tries < 3:
-                parse(tries + 1)
-        except Exception as e:
-            traceback.print_exc()
+    TG.send('Bot restarted')
 
     # Refresh indefinitely
     while True:
         time.sleep(5)
-        parse()
+        parse_retry(parse_page, browser)
         browser.refresh()
         time.sleep(2)

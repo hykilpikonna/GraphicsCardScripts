@@ -1,13 +1,11 @@
 import os
-import re
 import time
-import traceback
 
-import requests
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver import Chrome
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+
+from utils import parse_retry, TelegramReporter, CSS
 
 # Config
 # Telegram chat ID that receives update messages (could be a channel in @channel_id format)
@@ -15,19 +13,12 @@ from selenium.webdriver.common.by import By
 TG_RECEIVER = '@toronto_ps5_bestbuy'
 # Telegram bot token
 TG_TOKEN = os.environ['TG_TOKEN']
+# Alert receiver telegram chat ID
+ALERT_RECEIVER = -1001655384423
 
 # Constants
-CSS = By.CSS_SELECTOR
 AVAIL_TABLE: dict[str, bool] = {}
-IGNORED = []
-
-
-def send_message(msg: str):
-    r = requests.get(f'https://api.telegram.org/bot{TG_TOKEN}/sendMessage',
-                     params={'chat_id': TG_RECEIVER, 'parse_mode': 'Markdown', 'text': msg})
-
-    if r.status_code != 200:
-        print('Request not OK:', r.status_code, r.text)
+TG = TelegramReporter(TG_TOKEN, TG_RECEIVER, ALERT_RECEIVER)
 
 
 def parse_page(browser: Chrome):
@@ -35,17 +26,13 @@ def parse_page(browser: Chrome):
     for item in browser.find_elements(By.CLASS_NAME, 'x-productListItem'):
         title = item.find_element(CSS, 'div[data-automation="productItemName"]').get_attribute('innerHTML')
 
-        # Ignored
-        if title in IGNORED:
-            continue
-
         # Check availability
         avail = item.find_elements(CSS, 'div[data-automation="store-availability-messages"] span[data-automation="store-availability-checkmark"]')
 
         # Not available, check if it was previously available
         if len(avail) == 0:
             if title in AVAIL_TABLE:
-                send_message(f'Sold out: `{title}`')
+                TG.send(f'Sold out: `{title}`')
                 del AVAIL_TABLE[title]
             continue
 
@@ -62,8 +49,11 @@ def parse_page(browser: Chrome):
 
         # Available and meets threshold criteria, notify user
         AVAIL_TABLE[title] = True
-        send_message(f'PS5 Became Available!\n'
-                     f'- [{title}]({link})')
+        TG.send(f'PS5 Became Available!\n'
+                        f'- [{title}]({link}) ${price:.2f}')
+
+        # Check alert
+        TG.alert()
 
 
 if __name__ == '__main__':
@@ -73,23 +63,14 @@ if __name__ == '__main__':
     browser = Chrome(options=web_options)
     browser.get('https://www.bestbuy.ca/en-ca/category/ps5-consoles/17583383')
 
-    send_message('Bot started')
+    TG.send('Bot restarted')
 
     # parse_page(browser)
     # browser.close()
 
-    def parse(tries: int = 0):
-        try:
-            parse_page(browser)
-        except StaleElementReferenceException:
-            if tries < 3:
-                parse(tries + 1)
-        except Exception as e:
-            traceback.print_exc()
-
     # Refresh indefinitely
     while True:
         time.sleep(5)
-        parse()
+        parse_retry(parse_page, browser)
         browser.refresh()
         time.sleep(2)
